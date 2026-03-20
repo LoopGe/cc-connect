@@ -73,7 +73,6 @@ func (p *interactivePlatform) SendCard(ctx context.Context, rctx any, card *core
 // callback responses (CardActionTriggerResponse).
 func renderCardMap(card *core.Card, sessionKey string) map[string]any {
 	result := map[string]any{
-		"schema": "2.0",
 		"config": map[string]any{
 			"wide_screen_mode": true,
 		},
@@ -102,7 +101,7 @@ func renderCardMap(card *core.Card, sessionKey string) map[string]any {
 		case core.CardMarkdown:
 			elements = append(elements, map[string]any{
 				"tag":     "markdown",
-				"content": e.Content,
+				"content": convertMarkdownHeadings(e.Content),
 			})
 		case core.CardDivider:
 			elements = append(elements, map[string]any{
@@ -239,29 +238,8 @@ func renderCardMap(card *core.Card, sessionKey string) map[string]any {
 		elements = []map[string]any{{"tag": "markdown", "content": " "}}
 	}
 
-	// Use schema 2.0 for better markdown rendering (headings, etc.) when
-	// the card has no interactive components. Fall back to v1 when buttons,
-	// forms, or selects are present — v1 action/button tags are not fully
-	// compatible with 2.0's body.elements structure.
-	if hasInteractiveElements(elements) {
-		result["elements"] = elements
-		delete(result, "schema")
-	} else {
-		result["body"] = map[string]any{"elements": elements}
-	}
+	result["elements"] = elements
 	return result
-}
-
-// hasInteractiveElements returns true if any element is an interactive component
-// (action, button, form, select, column_set with buttons) that requires v1 format.
-func hasInteractiveElements(elements []map[string]any) bool {
-	for _, e := range elements {
-		switch e["tag"] {
-		case "action", "form", "select_static", "column_set":
-			return true
-		}
-	}
-	return false
 }
 
 type deleteModeCheckerRow struct {
@@ -427,7 +405,6 @@ func renderDeleteModeCheckerCard(card *core.Card, base map[string]any) (map[stri
 	}
 
 	base["elements"] = elements
-	delete(base, "schema")
 	return base, true
 }
 
@@ -457,6 +434,27 @@ func parseDeleteModeListItemAction(action string) (id string, selectable bool, o
 	default:
 		return "", false, false
 	}
+}
+
+// convertMarkdownHeadings converts standard markdown headings (# H1, ## H2, etc.)
+// to bold text, since Feishu v1 card markdown elements do not render headings.
+func convertMarkdownHeadings(md string) string {
+	lines := strings.Split(md, "\n")
+	changed := false
+	for i, line := range lines {
+		for level := 6; level >= 1; level-- {
+			prefix := strings.Repeat("#", level) + " "
+			if strings.HasPrefix(line, prefix) {
+				lines[i] = "**" + strings.TrimPrefix(line, prefix) + "**"
+				changed = true
+				break
+			}
+		}
+	}
+	if !changed {
+		return md
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderCard converts a core.Card into the Feishu Interactive Card JSON string.

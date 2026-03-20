@@ -1756,20 +1756,19 @@ type feishuPreviewHandle struct {
 }
 
 // buildCardJSON builds a Feishu interactive card JSON string with a markdown element.
-// Uses schema 2.0 format which supports headings, tables, and rich markdown rendering.
+// Uses v1 format (top-level "elements") for compatibility with renderCardMap, so that
+// Patch updates between buildCardJSON and renderCardMap (e.g. embedding permission
+// buttons into the streaming preview) use the same card structure.
 // Card font is inherently smaller than Post/Text — this is a Feishu platform limitation.
 func buildCardJSON(content string) string {
 	card := map[string]any{
-		"schema": "2.0",
 		"config": map[string]any{
 			"wide_screen_mode": true,
 		},
-		"body": map[string]any{
-			"elements": []map[string]any{
-				{
-					"tag":     "markdown",
-					"content": content,
-				},
+		"elements": []map[string]any{
+			{
+				"tag":     "markdown",
+				"content": convertMarkdownHeadings(content),
 			},
 		},
 	}
